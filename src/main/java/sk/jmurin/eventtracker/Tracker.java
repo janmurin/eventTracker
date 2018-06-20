@@ -5,7 +5,8 @@
  */
 package sk.jmurin.eventtracker;
 
-import java.util.Collections;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -57,38 +58,30 @@ public class Tracker {
         }
     }
 
-    public static Map<String, Integer> findFreeSeats(String url) {
+    public static Map<String, Integer> findFreeSeats(String url) throws Exception {
         JSoup jsoup = new JSoup();
         Map<String, Integer> ticketsCount = new HashMap<>();
 
-        try {
-            System.out.println("loading url: " + url);
-            Document page = jsoup.getPage(url);
+        System.out.println("loading url: " + url);
+        Document page = jsoup.getPage(url);
 
-            Elements reserved = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-reserved");
-            ticketsCount.put("reserved", reserved.size());
-            System.out.println("reserved tickets count: " + reserved.size());
+        Elements reserved = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-reserved");
+        ticketsCount.put("reserved", reserved.size());
+        System.out.println("reserved tickets count: " + reserved.size());
 
-            Elements sold = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-sold");
-            ticketsCount.put("sold", sold.size());
-            System.out.println("sold tickets count: " + sold.size());
+        Elements sold = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-sold");
+        ticketsCount.put("sold", sold.size());
+        System.out.println("sold tickets count: " + sold.size());
 
-            Elements free = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-free");
-            ticketsCount.put("free", free.size());
-            System.out.println("free tickets count: " + free.size());
+        Elements free = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-free");
+        ticketsCount.put("free", free.size());
+        System.out.println("free tickets count: " + free.size());
 
-            Elements all = page.select(".tickets-wrapper div[id*=\"place-\"]");
-            ticketsCount.put("all", all.size());
-            System.out.println("all tickets count: " + all.size());
+        Elements all = page.select(".tickets-wrapper div[id*=\"place-\"]");
+        ticketsCount.put("all", all.size());
+        System.out.println("all tickets count: " + all.size());
 
-            return ticketsCount;
-
-        } catch (Exception ex) {
-            Logger.getLogger(Tracker.class.getName()).log(Level.SEVERE, null, ex);
-            // send email that link is unavailable
-
-            return Collections.EMPTY_MAP;
-        }
+        return ticketsCount;
     }
 
     public static void main(String[] args) {
@@ -120,28 +113,42 @@ public class Tracker {
                 alwaysSend = true;
             }
         }
-        //url = "https://www.navstevnik.sk/vyber-vstupeniek?eventId=1028540";
+
         if (url.equals("")) {
             System.out.println("no url specified. use -url urlString");
             return;
         }
-        //recipient = "jan.murin@globallogic.com";
+
         if (recipient.equals("")) {
             System.out.println("no recipient specified. use -recipient recipient@example.com");
             return;
         }
 
         System.out.println("\nCurrent time: " + new Date().toString());
-        Map<String, Integer> seats = findFreeSeats(url);
 
-        int freeCount = seats.get("free");
-        if (alwaysSend || freeCount > 0) {
-            String content = "REPORT\n\n"
-                    + "url: " + url + "\n"
-                    + "event stats: " + seats.toString();
-            sendEmail(recipient, content, freeCount > 0);
-        } else {
-            System.out.println("not sending email");
+        try {
+            Map<String, Integer> seats = findFreeSeats(url);
+            if (seats.isEmpty()) {
+                sendEmail(recipient, recipient, alwaysSend);
+            }
+
+            int freeCount = seats.get("free");
+            if (alwaysSend || freeCount > 0) {
+                String content = "REPORT\n\n"
+                        + "url: " + url + "\n"
+                        + "event stats: " + seats.toString();
+                sendEmail(recipient, content, freeCount > 0);
+            } else {
+                System.out.println("not sending email");
+            }
+
+        } catch (Exception ex) {
+            Logger.getLogger(Tracker.class.getName()).log(Level.SEVERE, null, ex);
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            ex.printStackTrace(pw);
+
+            sendEmail(recipient, sw.toString(), true);
         }
     }
 }
