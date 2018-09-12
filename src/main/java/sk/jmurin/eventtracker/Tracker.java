@@ -30,72 +30,76 @@ import org.jsoup.nodes.Element;
  * @author janmu
  */
 public class Tracker {
-    
+
     public enum EmailTypes {
         SUCCESS, REPORT, EXCEPTION;
     }
-    
+
     public static void sendEmail(String recipient, String content, EmailTypes type) {
         System.out.println("sending email to [" + recipient + "] with content: [" + content + "] ");
-        
-        String host = "localhost";
 
-        // Get system properties
-        Properties properties = System.getProperties();
+        final String username = "";
+        final String password = "";
+        String subject = "";
+        if (type == EmailTypes.SUCCESS) {
+            subject = "SUCCESS: FREE SEATS";
+        }
+        if (type == EmailTypes.EXCEPTION) {
+            subject = "EXCEPTION event tracker";
+        }
+        if (type == EmailTypes.REPORT) {
+            subject = "REPORT: event tracker";
+        }
 
-        // Setup mail server
-        properties.setProperty("mail.smtp.host", host);
+        Properties props = new Properties();
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.starttls.enable", "true");
+        props.put("mail.smtp.host", "smtp.websupport.sk");
+        props.put("mail.smtp.port", "25");
 
-        // Get the default Session object.
-        Session session = Session.getDefaultInstance(properties);
-        
+        Session session = Session.getInstance(props,
+                new javax.mail.Authenticator() {
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(username, password);
+            }
+        });
+
         try {
-            // Create a default MimeMessage object.
-            MimeMessage message = new MimeMessage(session);
 
-            // Set From: header field of the header.
-            message.setFrom(new InternetAddress("event-tracker@localhost.com"));
-
-            // Set Subject: header field
-            if (type == EmailTypes.SUCCESS) {
-                message.setSubject("SUCCESS: FREE SEATS");
-            }
-            if (type == EmailTypes.EXCEPTION) {
-                message.setSubject("EXCEPTION event tracker");
-            }
-            if (type == EmailTypes.REPORT) {
-                message.setSubject("REPORT: event tracker");
-            }
-
-            // Now set the actual message
+            Message message = new MimeMessage(session);
+            message.setFrom(new InternetAddress(username));
+            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
+            message.setSubject(subject);
             message.setText(content);
-            message.addRecipient(Message.RecipientType.TO, new InternetAddress(recipient));
+
             Transport.send(message);
-            
-        } catch (MessagingException mex) {
-            Logger.getLogger(Tracker.class.getName()).log(Level.SEVERE, null, mex);
+
+            System.out.println("Done");
+
+        } catch (MessagingException e) {
+            throw new RuntimeException(e);
         }
     }
-    
+
     public static Map<String, Integer> findFreeSeats(String url, Set<String> ignored) throws Exception {
         JSoup jsoup = new JSoup();
         Map<String, Integer> ticketsCount = new HashMap<>();
-        
+
         System.out.println("loading url: " + url);
         if (!ignored.isEmpty()) {
             System.out.println("ignoring seat ids: " + ignored);
         }
-        
+
         Document page = jsoup.getPage(url);
-        
+
         Elements reserved = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-reserved");
         ticketsCount.put("reserved", reserved.size());
         System.out.println("reserved tickets count: " + reserved.size());
-        
+
         Elements sold = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-sold");
         ticketsCount.put("sold", sold.size());
         System.out.println("sold tickets count: " + sold.size());
-        
+
         Elements free = page.select(".tickets-wrapper div[id*=\"place-\"].ticketSelect-section-place-free");
         int freeSize = free.size();
         Iterator<Element> iterator = free.iterator();
@@ -109,17 +113,17 @@ public class Tracker {
         }
         ticketsCount.put("free", freeSize);
         System.out.println("free tickets count: " + freeSize);
-        
+
         ticketsCount.put("ignored", free.size() - freeSize);
         System.out.println("ignored tickets count: " + ticketsCount.get("ignored"));
-        
+
         Elements all = page.select(".tickets-wrapper div[id*=\"place-\"]");
         ticketsCount.put("all", all.size());
         System.out.println("all tickets count: " + all.size());
-        
+
         return ticketsCount;
     }
-    
+
     public static void main(String[] args) {
         String url = "";
         String recipient = "";
@@ -167,25 +171,25 @@ public class Tracker {
                 alwaysSend = true;
             }
         }
-        
+
         if (url.equals("")) {
             System.out.println("no url specified. use -url urlString");
             return;
         }
-        
+
         if (recipient.equals("")) {
             System.out.println("no recipient specified. use -recipient recipient@example.com");
             return;
         }
-        
+
         System.out.println("\nCurrent time: " + new Date().toString());
-        
+
         try {
             Map<String, Integer> seats = findFreeSeats(url, ignored);
             if (seats.isEmpty()) {
                 sendEmail(recipient, "empty seats map. bad css selector??", EmailTypes.EXCEPTION);
             }
-            
+
             int freeCount = seats.get("free");
             if (alwaysSend || freeCount > 0) {
                 String content = "REPORT\n\n"
@@ -195,13 +199,13 @@ public class Tracker {
             } else {
                 System.out.println("not sending email");
             }
-            
+
         } catch (Exception ex) {
             Logger.getLogger(Tracker.class.getName()).log(Level.SEVERE, null, ex);
             StringWriter sw = new StringWriter();
             PrintWriter pw = new PrintWriter(sw);
             ex.printStackTrace(pw);
-            
+
             sendEmail(recipient, sw.toString(), EmailTypes.EXCEPTION);
         }
     }
